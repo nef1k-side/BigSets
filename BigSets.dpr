@@ -4,10 +4,12 @@ program BigSets;
 
 uses
   SysUtils,
-  BigSet in 'BigSet.pas';
+  BigSet in 'BigSet.pas',
+  LinkUtils in 'LinkUtils.pas';
 
 var
   head: TBigSet;
+  buf: boolean;
 
 begin
   head:= bsCreate;
@@ -19,6 +21,8 @@ begin
   bsInclude(head, 768);
 
   bsExclude(head, 512);
+  bsExclude(head, 777);
 
+  writeln(buf);
   readln;
 end.

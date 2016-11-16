@@ -2,36 +2,31 @@ unit BigSet;
 
 interface
 
-const
-  SMALL_SET_SIZE = 256;
+uses
+  LinkUtils;
 
 type
-  TSmallSet = set of byte;
-  PSetLink = ^TSetLink;
-  TSetLink = record
-    data: TSmallSet;
-    index: integer;
-    next: PSetLink;
-  end;
-
   TBigSet = PSetLink;
 
-//PRIVATE
-function _bsCreateLink(const index: integer): PSetLink;
-function _bsChainLinkAfter(var prevLink: PSetLink; var targetLink: PSetLink): PSetLink;
-function _bsCreateLinkAfter(var prevLink: PSetLink; const index: integer): PSetLink;
-function _bsRetrieveLinkWithIndex(var _bigSet: TBigSet; const targetIndex: integer; createIfNExists: boolean): PSetLink;
-procedure _bsInsertInSmallSet(var targetLink: PSetLink; const value: byte);
-procedure _bsDeleteLinkAfter(var targetLink: PSetLink);
-function _bsRetrieveLinkBefore(_bigSet: TBigSet; targetLink: PSetLink): PSetLink;
-
-//PUBLIC
+//Создаёт пустое множество, возвращает указатель на него
 function bsCreate: TBigSet;
+
+//Включает элемент value во множество _bigSet
 procedure bsInclude(var _bigSet: TBigSet; const value: integer);
+
+//Проверяет value на принадлежность большому множеству _bigSet
 function bsIsInSet(var _bigSet: TBigSet; const value: integer): boolean;
+
+
+//Исключает элемент value из множества _bigSet
 procedure bsExclude(var _bigSet: TBigSet; const value: integer);
 
+//Возвращает пересечение множеств bigSet1 и bigSet2
+function bsCombine(bigSet1, bigSet2: TBigSet): TBigSet;
+
 implementation
+
+uses Math;
 
 
 {
@@ -66,9 +61,9 @@ begin
 end;
 
 {
-  Исключает элемент value из множества _bigSet
+  Проверяет value на принадлежность большому множеству _bigSet
 }
-function bsIsInSet(var _bigSet: TBigSet; const value: integer):boolean;
+function bsIsInSet(var _bigSet: TBigSet; const value: integer): boolean;
 var
   targetIndex: integer;
   targetLink: PSetLink;
@@ -98,6 +93,9 @@ begin
   end;
 end;
 
+{
+  Исключает элемент value из множества _bigSet
+}
 procedure bsExclude(var _bigSet: TBigSet; const value: integer);
 var
   targetLink, prevLink: PSetLink;
@@ -133,138 +131,96 @@ begin
   //PROFIT
 end;
 
-{
-  Возвращает ссылку на звено, которое предшествует targetLink
-}
-function _bsRetrieveLinkBefore(_bigSet: TBigSet; targetLink: PSetLink): PSetLink;
+function bsCombine(bigSet1, bigSet2: TBigSet): TBigSet;
 var
-  currentLink: PSetLink;
-  isFound: boolean;
+  primaryLink,
+  secondaryLink,
+  bufLink,
+  resultTailLink: PSetLink;
 begin
-  //Поиск по звеньям от начала и до победного конца
-  currentLink:=_bigSet;
-  isFound:= false;
-  while (currentLink <> nil) and (not isFound) do
+  //Если первый список пуст, возвращаем второй
+  if (bigSet1 = nil) then
   begin
-    //Проверяем условие
-    isFound:= currentLink^.next = targetLink;
-
-    //Если не нашли, идём дальше
-    if not isFound then
-      currentLink:= currentLink^.next;
-  end;
-
-  result:= currentLink;
-end;
-
-procedure _bsDeleteLinkAfter(var targetLink: PSetLink);
-var
-  linkToDelete: PSetLink;
-begin
-  //Если переданное звено nil, делать нам тут нечего
-  if targetLink = nil then
+    result:= bigSet2;
+    exit;
+  end
+  //Если второй список пуст, возвращаем первый
+  else if (bigSet2 = nil) then
   begin
+    result:= bigSet1;
     exit;
   end;
 
-  //Получаем ссылку на то звено, которое нужно удалить
-  linkToDelete:= targetLink^.next;
-  //Если она оказалась
-  if linkToDelete = nil then
+  //Иначе надо думать...
+  result:= bsCreate();
+  resultTailLink:= result;
 
-  _bsChainLinkAfter(targetLink, linkToDelete^.next);
-end;
+  primaryLink:= bigSet1;
+  secondaryLink:= bigSet2;
 
-{
-  Добавляет в обычное множество звена targetLink элемент value
-}
-procedure _bsInsertInSmallSet(var targetLink: PSetLink; const value: byte);
-begin
-  targetLink^.data:= targetLink^.data + [value];
-end;
-
-{
-  Создаёт звено цепи
-  Возвращает указатель на него
-}
-function _bsCreateLink(const index: integer): PSetLink;
-begin
-  new(result);
-  result^.data:= [];
-  result^.index:= index;
-  result^.next:= nil;
-end;
-
-{
-  Привязывает звено targetLink после звена prevLink
-  Возвращает указатель на targetLink
-}
-function _bsChainLinkAfter(var prevLink: PSetLink; var targetLink: PSetLink): PSetLink;
-begin
-  //Подвязываем звено к следующему элементу
-  targetLink^.next:= prevLink^.next;
-
-  //А теперь впихиваем звено в цепь
-  prevLink^.next:= targetLink;
-
-  result:= targetLink;
-end;
-
-{
-  Создаёт звено цепи с индексом index и привязывает его после prevLink
-}
-function _bsCreateLinkAfter(var prevLink: PSetLink; const index: integer): PSetLink;
-begin
-  result:= _bsCreateLink(index);
-  
-  if prevLink <> nil then
-    result:= _bsChainLinkAfter(prevLink, result);  
-end;
-
-{
-  Ищет звено с индексом targetIndex и возвращает ссылку на него
-  Если звено не найдено, оно создаётся так, чтобы итоговая цепь была упорядочена
-}
-function _bsRetrieveLinkWithIndex(var _bigSet: TBigSet; const targetIndex: integer; createIfNExists: boolean): PSetLink;
-var
-  prevLink: PSetLink;
-  curLink: PSetLink;
-
-  isFound: boolean;
-begin
-  curLink:= _bigSet;
-  result:= nil;
-  prevLink:= nil;
-  isFound:= curLink^.index >= targetIndex;
-  
-  //Идти либо до конца, либо до того момент, когда
-  while (curLink <> nil) and (not isFound) do
+  //См. полное описание алгоритма чтобы понять это условие. Оно не такое простое, как кажется
+  while primaryLink <> nil do
   begin
-    //Индекс текущего звена не станет больше, либо равным целевому
-    isFound:= curLink^.index >= targetIndex;
-
-    if curLink^.index < targetIndex then
+    //Идём до тех пор, пока не дойдём до конца, либо пока индекс текущего звена, не станет больше/равен, чем у побочного
+    while (primaryLink <> nil) and (primaryLink^.index < secondaryLink^.index) do
     begin
-      //Шагаем дальше
-      prevLink:= curLink;
-      curLink:= curLink^.next;
+      //Добавляем пройденное звено в результирующую цепочку
+      bufLink:= _bsCreateLinkAfter(resultTailLink, primaryLink^.index);
+      bufLink^.data:= primaryLink^.data;
+
+      //Сдвигаем указатель на хвост результата
+      resultTailLink:= bufLink;
+
+      //Переходим к следующему звену
+      primaryLink:= primaryLink^.next;
     end;
+
+    //Внимание! Тут может быть досрочный выход из цикла
+    //Опять же, см. полное описание алгоритма. Тут всё не так просто
+    if primaryLink = nil then
+    begin
+      Continue;
+    end;
+
+    if primaryLink^.index = secondaryLink^.index then
+    begin
+      
+    end;
+
+    //Меняем текущий и побочный указатели
+    bufLink:= primaryLink;
+    primaryLink:= secondaryLink;
+    secondaryLink:= bufLink;
   end;
 
-  //Иначе, если текущий индекс стал больше целевого, либо мы оказались где-то в жопе, а звено нам всё же нужно
-  if (curLink = nil) or (curLink^.index > targetIndex) and (createIfNExists) then
-  begin
-      //Создаём звено после предыдущего с целевым индексом
-      //Возвращаем указатель на только что созданное звено
-      result:= _bsCreateLinkAfter(prevLink, targetIndex);
-  end
 
-  //Иначе, если текущий индекс равен целевому
-  else if curLink^.index = targetIndex then
-  begin
-    //Возвращаем указатель на текущее звено
-    result:= curLink;
-  end;
+
+  {
+    Идём по двум цепочкам
+    Но не просто идём
+
+    Есть два указателя на текущее звено: для перой цепи и для второй
+    Выставляем их в начала цепей соответственно
+
+    Есть текущий указатель, есть побочный указатель
+    Текущее звено - звено, на которое указывает текущий указатель
+    Побочное звено - звено, на которое указывает побочный указатель
+    Аналогично с индексами (текущий и побочный индекс)
+
+    Исходно, за текущий возьмём указатель
+    на первую цепь, за побочный - на вторую
+
+    Двигаем текущий указатель пока индекс текущего звена, не станет
+    больше/равен, чем у побочного. Короче, во время движения текущего
+    указателя индекс текущего звена, должен быть меньше, чем у побочного.
+    Во время движения добавляем пройденные звенья в результирующую цепочку.
+
+    Если текущий индекс равен побочному, добавляем текущее звено в
+    результирующую цепочку с текущим индексом и объединением двух маленьких
+    множеств. Затем сдвигаем побочный указатель на 1 шаг вперёд.
+
+    Меняем текущий и побочный указатели и повторяем всё это.
+  }
 end;
 
 end.
